@@ -1,5 +1,4 @@
-using JuMP
-using Ipopt
+using JuMP, Ipopt, Plots, PlotlyJS
 
 ##Supplementary Files
 
@@ -9,7 +8,7 @@ include("CollMat.jl")
 
 Nx = 2;
 Nu = 1;
-NFE = 20;
+NFE = 60;
 NCP = 3;
 x0= [0,0];
 dx0=[0,0];
@@ -27,13 +26,23 @@ dq0 = 0;
 
 
 
-
 p = [0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2];
 
+#p = [0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2];
 
+
+
+
+
+MColl = Collocation_Matrix(NCP)
+
+#Multi Stage Data---------------------------------------
+M  = 3;
+Nr = 2;
+Ns = M^Nr; 
 ##Probabilites----------------------------------------
 pr = [1/3 1/3 1/3];
-w = zeros(size(pr, 2)^2);
+w = zeros(size(pr, 2)^Nr);
 a = 1;
 for i in 1:size(pr, 2)
     global a
@@ -44,14 +53,6 @@ for i in 1:size(pr, 2)
 end
 ##--------------------------------------------
 
-
-
-MColl = Collocation_Matrix(NCP)
-
-#Multi Stage Data
-M  = 3;
-Nr = 2;
-Ns = M^Nr; 
 ##Model Defining
 
 m1 = Model(Ipopt.Optimizer)
@@ -103,7 +104,38 @@ end)
 
 
 ##Non-Anticipativity constraints---------------------------------------------------------
-#=
+
+for i in 1:Nr
+    for j in 1:M^(Nr-1)
+            @constraint(m1,  u[(j-1) * M + 1 : j * M - 1, 1:Nu, i] .== u[(j-1) * M + 2 : j * M, 1:Nu, i])
+            #@constraint(m1, constr_non[]  u[(j-1) * M + 1 : j * M - 1, 1:Nu, i] .== u[(j-1) * M + 2 : j * M, 1:Nu, i])
+    end
+end
+
+
+
+
+#=Just For test
+@constraints(m1, begin
+    u[1,1,1] == u[2,1,1]
+    u[2,1,1] == u[3,1,1]
+
+    u[4,1,1] == u[5,1,1]
+    u[5,1,1] == u[6,1,1]
+
+    u[7,1,1] == u[8,1,1]
+    u[8,1,1] == u[9,1,1]
+
+    u[1,1,2] == u[2,1,2]
+    u[2,1,2] == u[3,1,2]
+
+    u[4,1,2] == u[5,1,2]
+    u[5,1,2] == u[6,1,2]
+
+    u[7,1,2] == u[8,1,2]
+    u[8,1,2] == u[9,1,2]
+end)
+
 for i in 1:Nr
     for j in 1:M^(i-1)
         for k in 1:M-1
@@ -112,7 +144,7 @@ for i in 1:Nr
     end
 end
 =#
-
+#=
 @constraint(m1, u[1 : Ns - 1, 1:Nu, 1] .== u[2 : Ns, 1:Nu, 1]);
 
 if Nr >= 2
@@ -123,7 +155,7 @@ if Nr >= 2
         end
     end
 end
-
+=#
 
 ##Objective Function---------------------------------------------------------
 @NLobjective(m1, Min,  sum(w[ns] * q[ns, 1, end, end] for ns in 1:Ns))
@@ -140,12 +172,29 @@ Solution = JuMP.value.(u)[:,:,:]
 ##---------------------------------------------------------
 ##---------------------------------------------------------
 
-#=
-
-temp_pred_constraints = [ @constraint(m, dot(TM[i,:], u - u_cur_v) + T_cur[i] == T_pred[i]) for i = 1:128]
 
 
-for i = 1:128
-    set_name(temp_pred_constraints[i], "temp_pred_constraints[$(i)]")
-end
+
+u1 = [Solution[1,1,1], Solution[2,1,1], Solution[3,1,1]];
+u2 = [Solution[4,1,1], Solution[5,1,1], Solution[6,1,1]];
+u3 = [Solution[7,1,1], Solution[8,1,1], Solution[9,1,1]];
+u4 = [Solution[1,1,2], Solution[2,1,2], Solution[3,1,2]];
+u5 = [Solution[4,1,2], Solution[5,1,2], Solution[6,1,2]];
+u6 = [Solution[7,1,2], Solution[8,1,2], Solution[9,1,2]];
+Uplot = [u1; u2; u3; u4; u5; u6]
+#=--------for 27 scenario
+u1 = [Solution[1,1,1], Solution[2,1,1], Solution[3,1,1], Solution[4,1,1], Solution[5,1,1], Solution[6,1,1], Solution[7,1,1], Solution[8,1,1], Solution[9,1,1]];
+u2 = [Solution[10,1,1], Solution[11,1,1], Solution[12,1,1], Solution[13,1,1], Solution[5+9,1,1], Solution[6+9,1,1], Solution[7+9,1,1], Solution[8+9,1,1], Solution[9+9,1,1]];
+u3 = [Solution[1,1,1], Solution[2,1,1], Solution[3,1,1], Solution[4,1,1], Solution[5,1,1], Solution[6,1,1], Solution[1,1,1], Solution[7,1,1], Solution[9,1,1]];
+u4 = [Solution[1,1,2], Solution[2,1,2], Solution[3,1,2]];
+u5 = [Solution[4,1,2], Solution[5,1,2], Solution[6,1,2]];
+u6 = [Solution[7,1,2], Solution[8,1,2], Solution[9,1,2]];
 =#
+
+
+
+
+PlotlyJS
+
+
+scatter(Solution[:,1,1:2], ylims = (-2.2e-5, 2e-5), xlabel = "scenario", ylabel = "Value")
