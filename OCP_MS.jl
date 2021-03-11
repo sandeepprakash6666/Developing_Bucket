@@ -1,44 +1,25 @@
-using JuMP, Ipopt, Plots, PlotlyJS
-
+using JuMP, Ipopt, Plots
 ##Supplementary Files
-
 include("CollMat.jl")
-
 ##Required Parameters
-
 Nx = 2;
 Nu = 1;
 NFE = 60;
 NCP = 3;
-x0= [0,0];
+x0= [0, 1.0];
 dx0=[0,0];
 u0 = 0;
 q0 = 0;
 dq0 = 0;
+
 ##For Parameters----------------------------------------
-#pm = [0.8, 1.0, 1.2];
-#p = zeros(Ns, NFE)
-#p[1:M:end, :] .= pm[1]
-
-
-
-
-
-
-
-p = [0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2];
-
-#p = [0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2];
-
-
-
-
-
+#p = [0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2];
+p = [0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2];
+#p = hcat(p, p, p)
 MColl = Collocation_Matrix(NCP)
-
-#Multi Stage Data---------------------------------------
+##Multi Stage Data---------------------------------------
 M  = 3;
-Nr = 2;
+Nr = 3;
 Ns = M^Nr; 
 ##Probabilites----------------------------------------
 pr = [1/3 1/3 1/3];
@@ -51,8 +32,6 @@ for i in 1:size(pr, 2)
         a = a+1;
     end
 end
-##--------------------------------------------
-
 ##Model Defining
 
 m1 = Model(Ipopt.Optimizer)
@@ -66,9 +45,9 @@ m1 = Model(Ipopt.Optimizer)
 ##-----------------------------------------------------------------
 for ns in 1:Ns, nx in 1:Nx, nfe in 1:NFE, ncp in 1:NCP, nu in 1:Nu
     #Bounds
-    set_lower_bound(x[ns, nx, nfe, ncp], 0)
+    set_lower_bound(x[ns, nx, nfe, ncp], -10)
     set_upper_bound(x[ns, nx , nfe, ncp], 10)
-    set_lower_bound(u[ns, nu, nfe], -1)
+    set_lower_bound(u[ns, nu, nfe], -2)
     set_upper_bound(u[ns, nu, nfe], 2)
     #Start Values
     set_start_value(x[ns, nx, nfe, ncp],    x0[nx])
@@ -82,16 +61,11 @@ end
     ODE1[ns in 1:Ns, nfe in 1:NFE, ncp in 1:NCP, nu in 1:Nu],    dx[ns, 1, nfe, ncp]      == (p[ns] - x[ns, 2, nfe, ncp] ^2) * x[ns, 1, nfe, ncp] - x[ns, 2, nfe, ncp] + u[ns, nu, nfe];
     ODE2[ns in 1:Ns, nfe in 1:NFE, ncp in 1:NCP],    dx[ns, 2, nfe, ncp]      == x[ns, 1, nfe, ncp];
     #ODEn[nfe in 1:NFE, ncp in 1:NCP],   ...
+    
 end)
 ##Quadrature---------------------------------------------------------
 @NLconstraints(m1, begin
       Quad_Diff[ns in 1:Ns, nfe in 1:NFE, ncp in 1:NCP, nu in 1:Nu], dq[ns, 1, nfe, ncp]  == (x[ns, 1, nfe, ncp])^2 + (x[ns, 2, nfe, ncp])^2 + (u[ns, nu, nfe])^2
-end)
-##Input Penalty---------------------------------------------------------
-@NLconstraints(m1, begin
-
-      Input_Penalty_1[ns in 1:Ns, nfe in 1:1, nu in 1:Nu],     -0.05 <=   u[ns, nu, nfe] - u0[1]       <=  0.05
-      Input_Penalty_2[ns in 1:Ns, nfe in 2:NFE, nu in 1:Nu],   -0.05 <=   u[ns, nu, nfe] - u[ns, nu, nfe-1]    <=  0.05
 end)
 ##Collcation!---------------------------------------------------------
 @NLconstraints(m1, begin
@@ -104,18 +78,31 @@ end)
 
 
 ##Non-Anticipativity constraints---------------------------------------------------------
+#=
+for i in 1:Nr
+    for j in 1:M
+        @constraint(m1,  u[(j-1) * (M^(Nr-i)) + 1 : j * (M^(Nr-i)) - 1, 1:Nu, i] .== u[(j-1) * (M^(Nr-i)) + 2 : j * (M^(Nr-i)), 1:Nu, i])
+    end
+end
+=#
+
 
 for i in 1:Nr
-    for j in 1:M^(Nr-1)
-            @constraint(m1,  u[(j-1) * M + 1 : j * M - 1, 1:Nu, i] .== u[(j-1) * M + 2 : j * M, 1:Nu, i])
-            #@constraint(m1, constr_non[]  u[(j-1) * M + 1 : j * M - 1, 1:Nu, i] .== u[(j-1) * M + 2 : j * M, 1:Nu, i])
+    if i != Nr
+        for j in 1 : (M^i)
+            @constraint(m1,  u[(j-1)*(M^(Nr-i))+1 : j*(M^(Nr-i))-1, 1:Nu, i] .== u[(j-1)*(M^(Nr-i))+2 : j*(M^(Nr-i)), 1:Nu, i])
+        end
+    else
+        for j in 1: (M^(Nr-1))
+            @constraint(m1,  u[(j-1)*M+1 : j*M-1, 1:Nu, i] .== u[(j-1)*M+2 : j*M, 1:Nu, i])
+        end
     end
 end
 
 
 
-
 #=Just For test
+
 @constraints(m1, begin
     u[1,1,1] == u[2,1,1]
     u[2,1,1] == u[3,1,1]
@@ -166,35 +153,73 @@ JuMP.solve_time(m1)
 ##---------------------------------------------------------
 Solution = JuMP.value.(u)[:,:,:]
 ##---------------------------------------------------------
+Solution = JuMP.value.(u)[:,:,:]
+x       = JuMP.value.(x)[:,:,:,:]
+#u_plot  = cat(x0[1], Solution[1:NFE], dims = 1)
+#x1      = cat(x0[1], x[1,:,:], dims = 1)
+#x2      = cat(x0[2], x[2,:,:], dims = 1)
+t_plot = collect(1:NFE) 
 ##---------------------------------------------------------
+#choose backend for plots
+plotlyjs()
+px1 = plot(t_plot, x[1, 1, :, end],         label = "x1_1")
+for i in 2:Ns
+
+    px1 = plot!(t_plot, x[i, 1, :, end],         label = "x1_$i")
+
+end
+px2 = plot( t_plot, x[1, 2, :, end],         label = "x2_1")
+for i in 2:Ns
+
+    px2 = plot!(t_plot, x[i, 2, :, end],         label = "X2_$i")
+
+end
+
+pu = plot(t_plot, Solution[1,1,:], label = "U1", linetype = :steppost)
+for i in 2:Ns
+
+    pu = plot!(t_plot, Solution[i,1,:], label = "U_2", linetype = :steppost)
+
+end
+fig1 = plot(px1, px2, pu, layout = (3, 1), xaxis = "Time")
 ##---------------------------------------------------------
+#choose backend for plots
+plotlyjs()
+px = plot(t_plot, x[1, 1, :, end],         label = "x1_1")
+for i in 2:Ns
+
+    px = plot!(t_plot, x[i, 1, :, end],         label = "x1_$i")
+
+end
+px = plot!( t_plot, x[1, 2, :, end],         label = "x2_1")
+for i in 2:Ns
+
+    px = plot!(t_plot, x[i, 2, :, end],         label = "X2_$i")
+
+end
+
+pu = plot(t_plot, Solution[1,1,:], label = "U1", linetype = :steppost)
+for i in 2:Ns
+
+    pu = plot!(t_plot, Solution[i,1,:], label = "U_2", linetype = :steppost)
+
+end
+fig1 = plot(px, pu, layout = (2, 1), xaxis = "Time")
 ##---------------------------------------------------------
+scatter(Solution[1:9,1,1])
 ##---------------------------------------------------------
+scatter(Solution[10:18,1,1])
 ##---------------------------------------------------------
-
-
-
-
-u1 = [Solution[1,1,1], Solution[2,1,1], Solution[3,1,1]];
-u2 = [Solution[4,1,1], Solution[5,1,1], Solution[6,1,1]];
-u3 = [Solution[7,1,1], Solution[8,1,1], Solution[9,1,1]];
-u4 = [Solution[1,1,2], Solution[2,1,2], Solution[3,1,2]];
-u5 = [Solution[4,1,2], Solution[5,1,2], Solution[6,1,2]];
-u6 = [Solution[7,1,2], Solution[8,1,2], Solution[9,1,2]];
-Uplot = [u1; u2; u3; u4; u5; u6]
-#=--------for 27 scenario
-u1 = [Solution[1,1,1], Solution[2,1,1], Solution[3,1,1], Solution[4,1,1], Solution[5,1,1], Solution[6,1,1], Solution[7,1,1], Solution[8,1,1], Solution[9,1,1]];
-u2 = [Solution[10,1,1], Solution[11,1,1], Solution[12,1,1], Solution[13,1,1], Solution[5+9,1,1], Solution[6+9,1,1], Solution[7+9,1,1], Solution[8+9,1,1], Solution[9+9,1,1]];
-u3 = [Solution[1,1,1], Solution[2,1,1], Solution[3,1,1], Solution[4,1,1], Solution[5,1,1], Solution[6,1,1], Solution[1,1,1], Solution[7,1,1], Solution[9,1,1]];
-u4 = [Solution[1,1,2], Solution[2,1,2], Solution[3,1,2]];
-u5 = [Solution[4,1,2], Solution[5,1,2], Solution[6,1,2]];
-u6 = [Solution[7,1,2], Solution[8,1,2], Solution[9,1,2]];
-=#
-
-
-
-
-PlotlyJS
-
-
-scatter(Solution[:,1,1:2], ylims = (-2.2e-5, 2e-5), xlabel = "scenario", ylabel = "Value")
+scatter(Solution[19:27,1,1])
+##---------------------------------------------------------
+scatter(Solution[1:end,1,1])
+##---------------------------------------------------------
+scatter(Solution[1:9,1,2])
+##---------------------------------------------------------
+scatter(Solution[10:18,1,2])
+##---------------------------------------------------------
+scatter(Solution[19:27,1,2])
+##---------------------------------------------------------
+scatter(Solution[4:6,1,2])
+##---------------------------------------------------------
+scatter(Solution[1:end,1,1:4])
