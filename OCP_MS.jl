@@ -13,26 +13,82 @@ q0 = 0;
 dq0 = 0;
 
 ##For Parameters----------------------------------------
-#p = [0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2];
-p = [0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2];
-#p = hcat(p, p, p)
-MColl = Collocation_Matrix(NCP)
+
 ##Multi Stage Data---------------------------------------
 M  = 3;
 Nr = 3;
 Ns = M^Nr; 
-##Probabilites----------------------------------------
-pr = [1/3 1/3 1/3];
-w = zeros(size(pr, 2)^Nr);
-a = 1;
-for i in 1:size(pr, 2)
-    global a
-    for j in 1:size(pr, 2)
-        w[a] = pr[i] * pr[j]
-        a = a+1;
-    end
+
+p = [0.8, 1.0, 1.2]
+w_p = [1/3, 1/3, 1/3]
+#Building the parameter matrix
+p_mat = NaN*ones(Ns, NFE)
+w_mat = NaN*ones(Ns,Nr)
+
+#Till Nr
+for nfe in 1:Nr
+    # nfe = 3
+    global Gs, Bs
+    Gs = M^(nfe);
+    Bs = M^(Nr - nfe);
+    
+    for gs in 1:Gs
+    # gs = 2
+        if mod(gs, M) == 0
+            p_mat[(gs-1)*Bs + 1 : (gs)*Bs, nfe]     .=  p[M]
+            w_mat[(gs-1)*Bs + 1 : (gs)*Bs, nfe]     .=  w_p[M]
+        else
+            p_mat[(gs-1)*Bs + 1 : (gs)*Bs, nfe]     .=  p[mod(gs,M)]
+            w_mat[(gs-1)*Bs + 1 : (gs)*Bs, nfe]     .=  w_p[mod(gs,M)]
+            # @constraint(m1,  u[(gs-1)*Bs+1 : (gs)*Bs-1, 1:Nu, nfe] .== u[(gs-1)*Bs+2 : (gs)*Bs, 1:Nu, nfe])
+        end
 end
+end
+
+p_mat
+w_mat
+
+#Remaining (from Nr+1 to NFE)
+p_mat[:, Nr + 1 : end] .= p_mat[:, Nr]
+ 
+p_mat
+
+
+#Probability of each scenario
+w = NaN*ones(Ns)
+
+for i in 1:Ns
+    w[i] = prod( w_mat[i, 1:end] )
+end
+
+w
+
+sum(w)
+
+
+
+
+
+# #p = [0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2];
+# p = [0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2, 0.8, 1.0, 1.2];
+
+
+#p = hcat(p, p, p)
+MColl = Collocation_Matrix(NCP)
+
+##Probabilites----------------------------------------
+# pr = [1/3 1/3 1/3];
+# w = NaN*ones(size(pr, 2)^Nr);
+# a = 1;
+# for i in 1:size(pr, 2)
+    # global a
+    # for j in 1:size(pr, 2)
+        # w[a] = pr[i] * pr[j]
+        # a = a+1;
+    # end
+# end
 ##Model Defining
+# w
 
 m1 = Model(Ipopt.Optimizer)
 
@@ -58,7 +114,7 @@ for ns in 1:Ns, nx in 1:Nx, nfe in 1:NFE, ncp in 1:NCP, nu in 1:Nu
 end
 ##Set the ODEs-----------------------------------------------
 @NLconstraints(m1, begin
-    ODE1[ns in 1:Ns, nfe in 1:NFE, ncp in 1:NCP, nu in 1:Nu],    dx[ns, 1, nfe, ncp]      == (p[ns] - x[ns, 2, nfe, ncp] ^2) * x[ns, 1, nfe, ncp] - x[ns, 2, nfe, ncp] + u[ns, nu, nfe];
+    ODE1[ns in 1:Ns, nfe in 1:NFE, ncp in 1:NCP, nu in 1:Nu],    dx[ns, 1, nfe, ncp]      == (p_mat[ns,nfe] - x[ns, 2, nfe, ncp] ^2) * x[ns, 1, nfe, ncp] - x[ns, 2, nfe, ncp] + u[ns, nu, nfe];
     ODE2[ns in 1:Ns, nfe in 1:NFE, ncp in 1:NCP],    dx[ns, 2, nfe, ncp]      == x[ns, 1, nfe, ncp];
     #ODEn[nfe in 1:NFE, ncp in 1:NCP],   ...
     
