@@ -4,7 +4,7 @@ include("CollMat.jl")
 ##Required Parameters
 Nx = 2;
 Nu = 1;
-NFE = 60;
+NFE = 20;
 NCP = 3;
 x0= [0, 1.0];
 dx0=[0,0];
@@ -80,14 +80,6 @@ end)
 ##Non-Anticipativity constraints---------------------------------------------------------
 #=
 for i in 1:Nr
-    for j in 1:M
-        @constraint(m1,  u[(j-1) * (M^(Nr-i)) + 1 : j * (M^(Nr-i)) - 1, 1:Nu, i] .== u[(j-1) * (M^(Nr-i)) + 2 : j * (M^(Nr-i)), 1:Nu, i])
-    end
-end
-=#
-
-
-for i in 1:Nr
     if i != Nr
         for j in 1 : (M^i)
             @constraint(m1,  u[(j-1)*(M^(Nr-i))+1 : j*(M^(Nr-i))-1, 1:Nu, i] .== u[(j-1)*(M^(Nr-i))+2 : j*(M^(Nr-i)), 1:Nu, i])
@@ -98,51 +90,17 @@ for i in 1:Nr
         end
     end
 end
+=#
 
-
-
-#=Just For test
-
-@constraints(m1, begin
-    u[1,1,1] == u[2,1,1]
-    u[2,1,1] == u[3,1,1]
-
-    u[4,1,1] == u[5,1,1]
-    u[5,1,1] == u[6,1,1]
-
-    u[7,1,1] == u[8,1,1]
-    u[8,1,1] == u[9,1,1]
-
-    u[1,1,2] == u[2,1,2]
-    u[2,1,2] == u[3,1,2]
-
-    u[4,1,2] == u[5,1,2]
-    u[5,1,2] == u[6,1,2]
-
-    u[7,1,2] == u[8,1,2]
-    u[8,1,2] == u[9,1,2]
-end)
-
-for i in 1:Nr
-    for j in 1:M^(i-1)
-        for k in 1:M-1
-            @constraint(m1, u[k + M * (j-1), 1:Nu, i] .== u[k+1 + M * (j-1), 1:Nu, i])
-        end
+for nfe in 1:Nr
+    global Gs, Bs
+    Gs = M^(nfe - 1);
+    Bs = M^(Nr - nfe + 1);
+    for gs in 1:Gs
+        @constraint(m1,  u[(gs-1)*Bs+1 : (gs)*Bs-1, 1:Nu, nfe] .== u[(gs-1)*Bs+2 : (gs)*Bs, 1:Nu, nfe])
     end
 end
-=#
-#=
-@constraint(m1, u[1 : Ns - 1, 1:Nu, 1] .== u[2 : Ns, 1:Nu, 1]);
 
-if Nr >= 2
-    for i in 2:Nr
-        for j in 1:M^(Nr-1)
-                @constraint(m1,  u[(j-1) * M + 1 : j * M - 1, 1:Nu, i] .== u[(j-1) * M + 2 : j * M, 1:Nu, i])
-                #@constraint(m1, constr_non[]  u[(j-1) * M + 1 : j * M - 1, 1:Nu, i] .== u[(j-1) * M + 2 : j * M, 1:Nu, i])
-        end
-    end
-end
-=#
 
 ##Objective Function---------------------------------------------------------
 @NLobjective(m1, Min,  sum(w[ns] * q[ns, 1, end, end] for ns in 1:Ns))
@@ -152,16 +110,18 @@ JuMP.termination_status(m1)
 JuMP.solve_time(m1)
 ##---------------------------------------------------------
 Solution = JuMP.value.(u)[:,:,:]
-##---------------------------------------------------------
-Solution = JuMP.value.(u)[:,:,:]
 x       = JuMP.value.(x)[:,:,:,:]
-#u_plot  = cat(x0[1], Solution[1:NFE], dims = 1)
-#x1      = cat(x0[1], x[1,:,:], dims = 1)
-#x2      = cat(x0[2], x[2,:,:], dims = 1)
+u_plot  = cat(x0[1], Solution[1:NFE], dims = 1)
+x1      = cat(x0[1], x[1,:,:,:], dims = 1)
+x2      = cat(x0[2], x[2,:,:,:], dims = 1)
 t_plot = collect(1:NFE) 
 ##---------------------------------------------------------
 #choose backend for plots
 plotlyjs()
+
+
+
+
 px1 = plot(t_plot, x[1, 1, :, end],         label = "x1_1")
 for i in 2:Ns
 
@@ -206,15 +166,19 @@ for i in 2:Ns
 end
 fig1 = plot(px, pu, layout = (2, 1), xaxis = "Time")
 ##---------------------------------------------------------
-scatter(Solution[1:9,1,1])
+scatter(Solution[1:end,1,1])
 ##---------------------------------------------------------
-scatter(Solution[10:18,1,1])
+scatter(Solution[1:end,1,2])
+##---------------------------------------------------------
+scatter(Solution[1:end,1,3])
+##---------------------------------------------------------
+scatter(Solution[1:end,1,1:3])
 ##---------------------------------------------------------
 scatter(Solution[19:27,1,1])
 ##---------------------------------------------------------
 scatter(Solution[1:end,1,1])
 ##---------------------------------------------------------
-scatter(Solution[1:9,1,2])
+scatter(Solution[4:6,1,2])
 ##---------------------------------------------------------
 scatter(Solution[10:18,1,2])
 ##---------------------------------------------------------
